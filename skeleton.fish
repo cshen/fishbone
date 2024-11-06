@@ -20,6 +20,7 @@ set shell_brand ''
 set shell_version ''
 set temp_files ''
 set sourced ''
+set piped ''
 
 
 # NB: CS:  5 Nov 2024 22:45 
@@ -61,6 +62,10 @@ set config_icon '[c]'
 set clean_icon '[c]'
 set require_icon '[r]'
 
+
+
+
+#---------- Start of function definition ----------------------------------------------------
 ### stdIO:print/stderr output
 function IO:initialize
     set script_started_at (Tool:time | string collect; or echo)
@@ -108,12 +113,13 @@ end
 
 
 function IO:print
-    test "$QUIET" && true || printf '%b\\n' "$argv"
+    test "$QUIET" = 0 || printf '%b\\n' "$argv"
+    return 0
 end
 
 function IO:debug
     test "$VERBOSE" = 0 && IO:print "$txtInfo"'# '"$argv"' '"$txtReset" >&2
-    true
+    return 0
 end
 
 function IO:die
@@ -139,24 +145,24 @@ end
 
 function IO:progress
 
-    if not test "$QUIET"
+    if  test "$QUIET" != 0
         set -l screen_width (tput cols 2>/dev/null || echo 80)
         set -l rest_of_line ( math "$screen_width - 5" )
-
-        if test "$piped" != 0
-            IO:print \'... \'"$argv" >&2
+        
+        if test -n "$piped"; and test "$piped" -eq 0
+            IO:print '... '"$argv" >&2
         else
-            printf \'... %-\'"$rest_of_line"\'b\\\\r\' "$argv"\' \' >&2
+            printf \'... %-\'"$rest_of_line"\'b\\\\r\' "$argv"\'                                             \' >&2     
         end
     end
 end
 
 
 function IO:countdown
-    set -l seconds $argv[1]
-    set -l message $argv[2]
+    set -l seconds ( test -n "$argv[1]" && echo $argv[1] || echo 5 ) 
+    set -l message ( test -n "$argv[2]" && echo $argv[2] || echo Countdown )
 
-    if test "$piped" -eq 0
+    if test -n "$piped"; and test "$piped" -eq 0
         IO:print "$message"' '"$seconds"' seconds'
     else
         for i in ( seq 0  (math "$seconds -1" ) )
@@ -172,7 +178,7 @@ end
 ### interactive
 function IO:confirm
     test "$FORCE" -eq 0 && return 0
-    echo -n "Confirm: [y/N] default is No: "
+    echo  "Confirm: [y/N] default is No: "
     read -n 1 REPLY
 
     if test "$REPLY" = y; or test "$REPLY" = Y
@@ -185,7 +191,9 @@ end
 
 function IO:question
     set -l DEFAULT $argv[2]
-    read -r -p $argv[1]' '"$DEFAULT"' > ' ANSWER
+    echo "$argv[1]"
+    read -r ' '"$DEFAULT"' > ' ANSWER
+    
     test -z "$ANSWER" && echo "$DEFAULT" || echo "$ANSWER"
 end
 
@@ -210,7 +218,7 @@ end
 
 
 
-# G
+# 
 function Tool:time
     if test (command -v perl | string collect; or echo)
         perl -MTime::HiRes=time -e 'printf "%f\\n", time'
@@ -229,22 +237,21 @@ function Tool:time
     end
 end
 
-function Os:tempfile
-    if test "$argv[1]" = ""
-        set extension txt
-    else
-        set extension $argv[1]
-    end
 
+function Os:tempfile
+     
+    set -l ext ( test "$argv[1]" = "" && echo $argv[1] || echo txt )
+    
     set -l execution_day (date "+%Y-%m-%d")
-    set -l file (test -n "$TMP_DIR" && echo "$TMP_DIR" || echo '/tmp')'/'"$execution_day"'.'"$RANDOM"'.'"$extension"
+    set -l RND ( random 1 10000 )
+    set -l file (test -n "$TMP_DIR" && echo "$TMP_DIR" || echo '/tmp')'/'$execution_day'.'$RND'.'$ext
 
     IO:debug "$config_icon"' tmp_file: '"$file"
     set -a temp_files "$file"
     echo "$file"
 end
 
-# x
+ 
 function Os:import_env
 
     if test (pwd | string collect; or echo) = "$script_install_folder"
@@ -259,6 +266,9 @@ function Os:import_env
             source "$env_file"
         end
     end
+
+    # echo $env_files 
+
 end
 
 
@@ -294,7 +304,7 @@ function Str:slugify
     # Str:slugify <input> <separator>
     # Str:slugify "Jack, Jill & Clémence LTD"      => jack-jill-clemence-ltd
     # Str:slugify "Jack, Jill & Clémence LTD" "_"  => jack_jill_clemence_ltd
-    set separator "argv[2]"
+    set separator "$argv[2]"
     test -z "$separator" && set separator _
 
     string lower "$argv[1]" | Str:ascii | awk '{
@@ -343,9 +353,9 @@ end
 function Str:column --argument number F
 
     if test "$F" = ""
-        awk '{ print  $'$number' }'
+          cut -d " "  -f $number 
     else
-        awk -F$F '{ print  $'$number' }'
+         cut -d $F  -f $number 
     end
 end
 
@@ -398,17 +408,18 @@ function Script:meta
     set script_basename (basename (realpath (status current-filename)))
 
     set script_extension (path extension $script_basename)
-    set script_prefix (basename script_basename $script_extension)
+    set script_prefix (basename $script_basename $script_extension)
 
     set execution_day (date '+%Y-%m-%d' | string collect; or echo)
-
     IO:debug "$info_icon"' Script path: '"$script_install_path"
+    IO:debug "$info_icon"' Script prefix: '"$script_prefix"
+    IO:debug "$info_icon"' Script basename: '"$script_basename"
+    
 
     set script_install_path (Os:follow_link "$script_install_path" | string collect; or echo)
     IO:debug "$info_icon"' Linked path: '"$script_install_path"
 
     set script_install_folder (command cd -P (dirname "$script_install_path" | string collect; or echo) && pwd | string collect; or echo)
-
     IO:debug "$info_icon"' In folder  : '"$script_install_folder"
 
     if test -f "$script_install_path"
@@ -482,7 +493,7 @@ function Script:meta
     end
 
     IO:debug "$info_icon"' System OS  : '"$os_name"' ('"$os_kernel"') '"$os_version"' on '"$os_machine"
-    IO:debug "$info_icon"' Package mgt: '"$install_package"
+    IO:debug "$info_icon"' Package tool: '"$install_package"
 
     # get last modified date of this script
     set script_modified '??'
@@ -491,7 +502,7 @@ function Script:meta
     # for MacOS
 
     test "$os_kernel" = Darwin && set script_modified (stat -f '%Sm' "$script_install_path" 2>/dev/null | string collect; or echo)
-    IO:debug "$info_icon"' Version  : '"$script_version"
+  
     IO:debug "$info_icon"' Created  : '"$script_created"
     IO:debug "$info_icon"' Modified : '"$script_modified"
     IO:debug "$info_icon"' Lines    : '"$script_lines"' lines / md5: '"$script_hash"
@@ -505,15 +516,17 @@ function Script:meta
         IO:debug "$info_icon"' git folder : '"$git_repo_root"
     end
 
-    # get script version from VERSION.md file - which is automatically updated by pforret/setver
-    test -f "$script_install_folder"'/VERSION.md' && set script_version (cat "$script_install_folder"'/VERSION.md' | string collect; or echo)
-
+    # get script version from VERSION.md file - which is automatically updated by pforret/setver  
+    test -f "$script_install_folder"'/VERSION.md' && set script_version (command cat "$script_install_folder"'/VERSION.md' | string collect)
+    test -f "$script_install_folder"'/VERSION.txt' && set script_version (command cat "$script_install_folder"'/VERSION.txt' | string collect)
     # get script version from git tag file - which is automatically updated by pforret/setver
     set -l _git_tag ( git tag &>/dev/null )
-    if test -n $git_repo_root; and test -n $_git_tag
+    if test -n "$git_repo_root"; and test "$_git_tag" != ""
         set script_version (git tag --sort=version:refname | tail -1)
     end
-
+  
+    IO:debug "$info_icon"' Version  : '"$script_version"
+    
 end
 
 
@@ -529,16 +542,16 @@ function Script:initialize
     if test -n "$LOG_DIR"
         # clean up LOG folder after 1 month
         Os:folder "$LOG_DIR" 30
-        set "log_file $LOG_DIR/$script_prefix.$execution_day.log"
+        set log_file $LOG_DIR/$script_prefix.$execution_day".log"
         IO:debug "$config_icon log_file: $log_file"
     end
 end
 
 
-function Os:folder
-    if test -n $argv[1]
-        set -l folder $argv[1]
-
+function Os:folder --argument folder
+    
+    if test -n "$folder"
+        
         # CS:  6 Nov 2024 11:32 
         # to prevent disaster rm, force the folder name must contain log/temp/tmp
         if echo $folder | grep -i -q -E "log|temp|tmp"
@@ -549,7 +562,7 @@ function Os:folder
             return 1
         end
 
-        set -l max_days ( test -n $argv[2] && echo $argv[2] || echo 365 )
+        set -l max_days ( test -n "$argv[2]" && echo $argv[2] || echo 365 )
 
         if test ! -d "$folder"
             IO:debug "$clean_icon"' Create folder : ['"$folder"']'
@@ -562,25 +575,31 @@ function Os:folder
 end
 
 
-
-
 function Os:follow_link
     ## if it's not a symbolic link, return immediately
-    test ! -L $argv[1] && echo $argv[1] && return 0
+    if test ! -L $argv[1] 
+        # echo $argv[1] is not a symlink. abort
+        echo $argv[1]
+        return 0
+    end
 
     ## check if file has absolute/relative/no path
     set file_folder (dirname $argv[1] | string collect; or echo)
 
     # first char is / or not
     set first $( echo $file_folder  | string trim | string sub -s 1 -e 1 )
-    test "$first" != / && set file_folder (cd -P "$file_folder" &>/dev/null && pwd)
+    test "$first" != "/" && set file_folder (cd -P "$file_folder" &>/dev/null && pwd)
 
-
+    
     ## a relative path was given, resolve it; follow the link
     set symlink (readlink $argv[1] | string collect; or echo)
 
     ## check if link has absolute/relative/no path
     set link_folder (dirname "$symlink" | string collect; or echo)
+
+    # IO:debug "$info_icon "(set -S file_folder | string collect; or echo)
+    # IO:debug "$info_icon "(set -S symlink | string collect; or echo)
+    # IO:debug "$info_icon "(set -S link_folder | string collect; or echo)
 
     ## if no link path, stay in same folder
     test -z "$link_folder" && set link_folder "$file_folder"
@@ -601,7 +620,9 @@ end
 function Os:notify
     # cf https://levelup.gitconnected.com/5-modern-bash-scripting-techniques-that-only-a-few-programmers-know-4abb58ddadad
     set -l message $argv[1]
-    set -l source ( test -n $argv[2] && echo $argv[2] || echo $script_basename )
+    set -l source ( test -n "$argv[2]" && echo $argv[2] || echo $script_basename )
+
+    IO:debug "$info_icon "(set -S source | string collect; or echo)
 
     # for Linux
     test -n (command -v notify-send | string collect; or echo) && notify-send "$source" "$message"
@@ -631,17 +652,19 @@ end
 
 function Os:require
 
-    set -l install_instructions $install_instructions
-    set -l binary $binary
-    set -l words $words
-    set -l path_binary $path_binary
-    # $1 = binary that is required
+    if test -z "$argv[1]" 
+        IO:alert "at least one argument is needed."
+        return 0
+    end
 
     set binary $argv[1]
     set path_binary (command -v "$binary" 2>/dev/null | string collect; or echo)
-    test -n "$path_binary" && IO:debug '️'"$require_icon"' required ['"$binary"'] -> '"$path_binary" && return 0
+    if test -n "$path_binary" 
+        IO:debug "$require_icon"' required ['"$binary"'] -> '"$path_binary" 
+        return 0
+    end
 
-    # $2 = how to install it
+    # how to install it
     IO:alert "$script_basename"' needs ['"$binary"'] but it cannot be found'
 
     set words (echo $argv[2] | wc -w | string collect; or echo)
@@ -650,31 +673,40 @@ function Os:require
     test "$words" -eq 1 && set install_instructions "$install_package"' '$argv[2]
     test "$words" -gt 1 && set install_instructions $argv[2]
 
-    if test "$FORCE" != 0
+    if test "$FORCE" = 0
         IO:announce 'Installing ['$argv[1]'] ...'
         eval "$install_instructions"
     else
         IO:alert '1) install package  : '"$install_instructions"
-        IO:alert '2) check path       : export PATH="[path of your binary]:$PATH"'
+        IO:alert '2) check path       : fish_add_path "[path of your binary]"'
         IO:die 'Missing program/script ['"$binary"']'
     end
 end
 
-
+#
+# CS:  6 Nov 2024 18:07 
+# Only works when this file is part of the main script. If this file is sourced, it's not going to work
+#
 function Script:show_required
-    grep 'Os:require' "$script_install_path" | grep -v -E '\(\)| grep|# Os:require' | awk -v install="# $install_package" ' 
-    function ltrim(s) { sub(/^[ "\\t\\r\\n]+/, "", s); return s }
-    function rtrim(s) { sub(/[ "\\t\\r\\n]+$/, "", s); return s }
-    function trim(s) { return rtrim(ltrim(s)); }
-    NF == 2 {print install trim($2); }
-    NF == 3 {print install trim($3); }
-    NF > 3  {$1=""; $2=""; $0=trim($0); print "# " trim($0);}
-  ' | sort -u
+    
+    set -l main_file ( test -n "$argv[1]" && echo $argv[1] || echo "$script_install_path" )
+    if not test -f "$main_file" 
+        IO:alert "$main_file not found"
+        return 1
+    end 
+
+    # xargs remvoes blank lines 
+    echo '# Following packages are needed, you may install them using the command: '
+    echo -n "#       $install_package "
+
+    grep 'Os:require' "$main_file" |  grep -i -v -E '\(\)|grep|# Os:require' | Str:column 2 | sort -u | xargs
+    
+    return 0
 end
 
 
 function Option:filter
-    Option:config | grep "$1|" | cut -d'|' -f3 | sort | grep -v '^\s*$'
+    Option:config | grep "$argv[1]" | cut -d'|' -f3 | sort | grep -v '^\s*$'
 end
 
 
