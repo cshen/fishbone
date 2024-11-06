@@ -20,7 +20,7 @@ IO:announce "hello, world. Announce"
 # IO:countdown 2 "hello, world. Countdown"
 
 # IO:confirm 
-# IO:question age 30
+# IO:ask age 30
 
 set log_file /tmp/log1.txt
 IO:log xxxx 
