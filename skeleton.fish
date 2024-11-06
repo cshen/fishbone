@@ -238,6 +238,38 @@ function Tool:time
 end
 
 
+function Tool:throughput
+  set -l time_started $argv[1]
+  test -z "$time_started" && set time_started "$script_started_at"
+  set -l operations (test -n "$argv[2]" && echo "$argv[2]" || echo 1 )
+  set -l name (test -n "$argv[3]" && echo "$argv[3]" || echo operation )
+  
+  set -l time_finished (Tool:time | string collect; or echo)
+  set -l duration (Tool:calc "$time_finished"' - '"$time_started" | string collect; or echo)
+  set -l seconds (Tool:round "$duration" | string collect; or echo)
+  
+  if test "$operations" -gt 1
+    if test "$operations" -gt $seconds
+      set ops (Tool:calc "$operations"' / '"$duration" | string collect; or echo)
+      set ops (Tool:round "$ops" 3 | string collect; or echo)
+      set duration (Tool:round "$duration" 2 | string collect; or echo)
+      IO:print "$operations"' '"$name"' finished in '"$duration"' secs: '"$ops"' '"$name"'/sec'
+    else
+      set ops (Tool:calc "$duration"' / '"$operations" | string collect; or echo)
+      set ops (Tool:round "$ops" 3 | string collect; or echo)
+      set duration (Tool:round "$duration" 2 | string collect; or echo)
+      IO:print "$operations"' '"$name"' finished in '"$duration"' secs: '"$ops"' sec/'"$name"
+    end
+  else
+    set duration (Tool:round "$duration" 2 | string collect; or echo)
+    IO:print "$name"' finished in '"$duration"' secs'
+  end
+end
+
+
+
+
+
 function Os:tempfile
      
     set -l ext ( test "$argv[1]" = "" && echo $argv[1] || echo txt )
