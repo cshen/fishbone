@@ -60,7 +60,7 @@ set char_wait '...'
 set info_icon '(i)'
 set config_icon '[c]'
 set clean_icon '[c]'
-set require_icon '[r]'
+set require_icon '[pkg]'
 
 
 
@@ -388,7 +388,10 @@ end
 function script:safe_exit
 
     for temp_file in $temp_files
-        test -f "$temp_file" && fish -c 'io:debug \'Delete temp file [\'"$temp_file"\']\'; rm -f "$temp_file"'
+        if test -f "$temp_file"
+		io:debug 'Delete temp file ['"$temp_file"']'
+		rm -f "$temp_file"
+	end
     end
 
     trap - INT TERM EXIT
