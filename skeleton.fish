@@ -289,9 +289,6 @@ function system:load_env
             source "$env_file"
         end
     end
-
-    # echo $env_files 
-
 end
 
 
@@ -434,9 +431,6 @@ function script:housekeeping
     io:debug "$info_icon"' Script path: '"$script_install_path"
     io:debug "$info_icon"' Script prefix: '"$script_prefix"
     io:debug "$info_icon"' Script basename: '"$script_basename"
-
-
-    set script_install_path (system:follow_link "$script_install_path" | string collect; or echo)
     io:debug "$info_icon"' Linked path: '"$script_install_path"
 
     set script_install_folder (command cd -P (dirname "$script_install_path" | string collect; or echo) && pwd | string collect; or echo)
@@ -589,50 +583,6 @@ function system:folder --argument folder
             find "$folder" -mtime '+'"$max_days" -type f -exec rm -i {} \;
         end
     end
-end
-
-
-# I suspect realpath in fish will just work
-# FIXME Will find out later
-function system:follow_link
-    ## if it's not a symbolic link, return immediately
-    if test ! -L $argv[1]
-        # echo $argv[1] is not a symlink. abort
-        echo $argv[1]
-        return 0
-    end
-
-    ## check if file has absolute/relative/no path
-    set file_folder (dirname $argv[1] | string collect; or echo)
-
-    # first char is / or not
-    set first $( echo $file_folder  | string trim | string sub -s 1 -e 1 )
-    test "$first" != / && set file_folder (cd -P "$file_folder" &>/dev/null && pwd)
-
-
-    ## a relative path was given, resolve it; follow the link
-    set symlink (readlink $argv[1] | string collect; or echo)
-
-    ## check if link has absolute/relative/no path
-    set link_folder (dirname "$symlink" | string collect; or echo)
-
-    # io:debug "$info_icon "(set -S file_folder | string collect; or echo)
-    # io:debug "$info_icon "(set -S symlink | string collect; or echo)
-    # io:debug "$info_icon "(set -S link_folder | string collect; or echo)
-
-    ## if no link path, stay in same folder
-    test -z "$link_folder" && set link_folder "$file_folder"
-
-    set first $( echo $link_folder  | string trim | string sub -s 1 -e 1 )
-    # ./......., check if the first char is .
-    test "$first" = "." && set link_folder (cd -P "$file_folder" && cd -P "$link_folder" &>/dev/null && pwd)
-
-    ## a relative  link path was given, resolve it
-    set link_name (basename "$symlink" | string collect; or echo)
-    io:debug "$info_icon"' Symbolic ln: '$argv[1]' -> ['"$link_folder"'/'"$link_name"']'
-
-    ## recurse
-    system:follow_link "$link_folder"'/'"$link_name"
 end
 
 
