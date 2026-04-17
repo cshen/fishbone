@@ -751,7 +751,7 @@ function script:show_required
     echo '# Following packages are needed, you may install them using the command: '
     echo -n "#       $install_package "
 
-    grep 'system:require' "$main_file" | grep -i -v -E '\(\)|grep|^\s*function|^\s*#' | awk 'NF>1{print $2}' | sort -u | xargs
+    grep -E '^\s*system:require\b' "$main_file" | grep -i -v -E '\(\)|grep|^\s*function|^\s*#' | awk 'NF>1{print $2}' | sort -u | xargs
 
     return 0
 end
