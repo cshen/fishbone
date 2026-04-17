@@ -74,6 +74,9 @@ set require_icon '[pkg]'
 
 #---------- Start of function definition ----------------------------------------------------
 ### stdio:print/stderr output
+
+# Initialize terminal settings: detect piped/sourced state, enable ANSI color codes,
+# and select unicode or ASCII fallback icons. Call once before any other io: function.
 function io:init
     set script_started_at (utility:time | string collect; or echo)
     io:debug 'script '"$script_basename"' started at '"$script_started_at"
@@ -118,30 +121,42 @@ function io:init
 end
 
 
+# Print a line to stdout; silently skipped when QUIET=0.
+# Example: io:print "Processing $filename"
 function io:print
     test "$QUIET" = 0 || printf '%b\\n' "$argv"
     return 0
 end
 
+# Print a debug line (in color) to stderr; shown only when VERBOSE=0.
+# Example: io:debug "variable x = $x"
 function io:debug
     test "$VERBOSE" = 0 && io:print "$txtInfo"'# '"$argv"' '"$txtReset" >&2
     return 0
 end
 
+# Print a fatal error message to stderr then call script:safe_exit.
+# Example: io:die "Config file not found: $config_path"
 function io:die
     io:print "$txtError""$char_fail"' '"$script_basename""$txtReset"': '"$argv" >&2
     #  system:beep
     script:safe_exit
 end
 
+# Print a highlighted warning to stderr without stopping the script.
+# Example: io:alert "Skipping locked file: $f"
 function io:alert
     io:print "$txtWarn""$char_alert""$txtReset"': '"$txtUnderline""$argv""$txtReset" >&2
 end
 
+# Print a success message with a checkmark icon to stdout.
+# Example: io:success "Backup completed: $dest"
 function io:success
     io:print "$txtInfo""$char_succes""$txtReset"'  '"$txtBold""$argv""$txtReset"
 end
 
+# Print a notice with a wait icon and pause 1 second; use before a slow operation.
+# Example: io:announce "Connecting to $host..."
 function io:announce
     io:print "$txtInfo""$char_wait""$txtReset"'  '"$txtItalic""$argv""$txtReset"
     sleep 1
@@ -149,6 +164,8 @@ end
 
 
 
+# Overwrite the current terminal line with a status update (no newline) — ideal for loops.
+# Example: io:progress "Processed $i of $total files"
 function io:progress
     if test "$QUIET" != 0
         set -l screen_width (tput cols 2>/dev/null; or echo 80)
@@ -163,6 +180,8 @@ function io:progress
 end
 
 
+# Display a live countdown to stderr, then continue. Useful before irreversible operations.
+# Example: io:countdown 5 "Deleting data in"
 function io:countdown
     set -l seconds (if test -n "$argv[1]"; echo $argv[1]; else; echo 5; end)
     set -l message (if test -n "$argv[2]"; echo $argv[2]; else; echo Countdown; end)
@@ -182,6 +201,8 @@ end
 
 
 ### interactive
+# Prompt the user for y/N confirmation; returns 0 on yes, 1 on no. Skips when FORCE=0.
+# Example: io:confirm; and rm -rf $dir
 function io:confirm
     test "$FORCE" -eq 0 && return 0
     read -P "Confirm: [y/N] default is No: " -n 1 REPLY
@@ -195,6 +216,8 @@ function io:confirm
 end
 
 
+# Prompt the user for a free-form value with an optional default; prints the result.
+# Example: set port (io:ask "Port number" 8080)
 function io:ask
     set -l DEFAULT $argv[2]
     read -P "$argv[1] [$DEFAULT] > " ANSWER
@@ -204,6 +227,8 @@ function io:ask
 end
 
 
+# Append a timestamped entry to $log_file. Silently skipped if log_file is empty.
+# Example: io:log "Imported $rows rows from $src"
 function io:log
     # test -n to check if a variable is NOT empty
     if test -n "$log_file"
@@ -211,6 +236,8 @@ function io:log
     end
 end
 
+# Round a floating-point number to the given number of decimal places using awk.
+# Example: utility:round 3.14159 2  →  3.14
 function utility:round
     set -l number $argv[1]
     set -l decimals $argv[2]
@@ -220,6 +247,8 @@ end
 
 
 # 
+# Return a high-resolution Unix timestamp as a float; uses perl, python, ruby, or date.
+# Example: set t0 (utility:time)
 function utility:time
     if test (command -v perl | string collect; or echo)
         perl -MTime::HiRes=time -e 'printf "%f\\n", time'
@@ -235,6 +264,8 @@ function utility:time
 end
 
 
+# Compute and print ops/sec (or sec/op) since a start timestamp obtained from utility:time.
+# Example: utility:throughput $t0 1000 file  →  1000 file finished in 2.5 secs: 400.000 file/sec
 function utility:throughput
     set -l time_started $argv[1]
     test -z "$time_started" && set time_started "$script_started_at"
@@ -267,6 +298,8 @@ end
 
 
 
+# Create a unique temp file path under TMP_DIR (or /tmp) and register it for auto-cleanup.
+# Example: set tmp (system:tempfile csv)  →  /tmp/myscript.12345.csv
 function system:tempfile
 
     set -l ext (if test -n "$argv[1]"; echo $argv[1]; else; echo txt; end)
@@ -281,6 +314,8 @@ function system:tempfile
 end
 
 
+# Source .env, .<script>.env, and <script>.env files from the script's install folder and cwd.
+# Variables are exported into the current environment. Useful for secrets and config.
 function system:load_env
 
     if test (pwd | string collect; or echo) = "$script_install_folder"
@@ -300,6 +335,8 @@ end
 
 ### string processing
 
+# Strip leading and trailing whitespace. Accepts a piped stream or a direct argument.
+# Example: str:trim "  hello  "  →  hello   |   echo "  hi  " | str:trim
 function str:trim
     if isatty stdin # not a pipe or redirection
         string trim $argv
@@ -308,21 +345,28 @@ function str:trim
     end
 end
 
+# Convert text to lowercase. Accepts a piped stream or a direct argument.
+# Example: str:lower "Hello World"  →  hello world
 function str:lower
     isatty stdin && string lower $argv || cat | string lower
 end
 
+# Convert text to uppercase. Accepts a piped stream or a direct argument.
+# Example: str:upper "hello"  →  HELLO
 function str:upper
     isatty stdin && string upper $argv || cat | string upper
 end
 
 
+# Strip diacritics and accents, mapping characters to their plain ASCII equivalents.
+# Input must be piped. Example: echo "crème brûlée" | str:ascii  →  creme brulee
 function str:ascii
     # remove all characters with accents/diacritics to latin alphabet
     sed 'y/àáâäæãåāǎçćčèéêëēėęěîïííīįìǐłñńôöòóœøōǒõßśšûüǔùǖǘǚǜúūÿžźżÀÁÂÄÆÃÅĀǍÇĆČÈÉÊËĒĖĘĚÎÏÍÍĪĮÌǏŁÑŃÔÖÒÓŒØŌǑÕẞŚŠÛÜǓÙǕǗǙǛÚŪŸŽŹŻ/aaaaaaaaaccceeeeeeeeiiiiiiiilnnooooooooosssuuuuuuuuuuyzzzAAAAAAAAACCCEEEEEEEEIIIIIIIILNNOOOOOOOOOSSSUUUUUUUUUUYZZZ/'
 
 end
 
+# Convert text to a URL-safe lowercase slug. Default separator is "_"; pass second arg to override.
 function str:slugify
     # str:slugify <input> <separator>
     # str:slugify "Jack, Jill & Clémence LTD"      => jack-jill-clemence-ltd
@@ -341,6 +385,8 @@ function str:slugify
 end
 
 # -----------------------------------------
+# Convert text to TitleCase, joining words with a separator (default "_").
+# Strips accents, punctuation, and limits output to 50 chars.
 function str:title -d "Remove non-standard chars from a string"
     # str:title <input> <separator>
     # str:title "Jack, Jill & Clémence LTD"     => JackJillClemenceLtd # CS:  6 Nov 2024 00:59 by default using _
@@ -357,6 +403,8 @@ function str:title -d "Remove non-standard chars from a string"
 end
 
 
+# Compute the MD5 hash of piped input, truncated to the given length (default 10 chars).
+# Example: echo "hello" | str:md5 8  →  5d41402a
 function str:md5
 
     # default length 10
@@ -370,7 +418,7 @@ function str:md5
     end
 end
 
-# -----------------------------------------
+# Extract a specific column from piped text by position. Optional second arg sets delimiter.
 # Input string must be piped
 # echo a b c | str:column 2 --> b
 function str:column --argument number F
@@ -383,11 +431,15 @@ function str:column --argument number F
 end
 
 
+# Extract a specific line by 1-based index from piped text.
+# Example: cat file.txt | str:row 3  →  third line of the file
 function str:row --argument index
     sed -n "$index p"
 end
 
 
+# Delete all registered temp files, print runtime duration, then exit 0. Use instead of raw exit.
+# Example: script:safe_exit  (called automatically by io:die)
 function script:safe_exit
 
     for temp_file in $temp_files
@@ -409,6 +461,8 @@ function script:safe_exit
 end
 
 
+# Check if the git repo has upstream commits not yet pulled and prompt the user to update.
+# Silently does nothing when the script is not inside a git repository.
 function script:check_version
 
     set -l _old_dir (pwd)
@@ -432,6 +486,8 @@ end
 
 
 
+# Detect and store script path, name, OS, shell, git remote, and version into global vars.
+# Must be called before using $script_basename, $os_name, $install_package, etc.
 function script:housekeeping
 
     set script_install_path (realpath (status current-filename))
@@ -557,6 +613,7 @@ end
 
 
 function script:init
+    # Create TMP_DIR and LOG_DIR if configured; open today's log file. Called by script:initialize.
     set log_file ""
     if test -n "$TMP_DIR"
         # clean up TMP folder after 1 day
@@ -572,6 +629,9 @@ function script:init
 end
 
 
+# Create a folder if missing; purge files older than max_days (default 365) if it exists.
+# The path must contain "log", "temp", or "tmp" as a safety guard against accidental deletes.
+# Example: system:folder /var/log/myapp 30
 function system:folder --argument folder
 
     if test -n "$folder"
@@ -599,6 +659,8 @@ function system:folder --argument folder
 end
 
 
+# Send a desktop notification on macOS (via osascript) or Linux (via notify-send).
+# Example: system:notify "Backup done" "MyScript"
 function system:notify
     # cf https://levelup.gitconnected.com/5-modern-bash-scripting-techniques-that-only-a-few-programmers-know-4abb58ddadad
     set -l message $argv[1]
@@ -616,6 +678,8 @@ function system:notify
 end
 
 
+# Show an animated spinner in the terminal until a background process (by PID) finishes.
+# Example: sleep 5 &; system:busy $last_pid "Compressing archive"
 function system:busy
     # show spinner as long as process $pid is running
     set -l pid $argv[1]
@@ -634,6 +698,8 @@ function system:busy
 end
 
 
+# Assert a binary is on PATH; auto-install (FORCE=0) or die (FORCE=1) when missing.
+# Example: system:require jq; system:require convert "brew install imagemagick"
 function system:require
 
     if test -z "$argv[1]"
@@ -667,6 +733,8 @@ function system:require
     end
 end
 
+# Scan a fish script file for all system:require calls and print a ready-to-run install command.
+# Example: script:show_required myscript.fish
 #
 # CS:  6 Nov 2024 18:07 
 # Only works when this file is part of the main script. If this file is sourced, it's not going to work
@@ -683,12 +751,14 @@ function script:show_required
     echo '# Following packages are needed, you may install them using the command: '
     echo -n "#       $install_package "
 
-    grep 'system:require' "$main_file" | grep -i -v -E '\(\)|grep|^\s*function|# system:require' | awk 'NF>1{print $2}' | sort -u | xargs
+    grep 'system:require' "$main_file" | grep -i -v -E '\(\)|grep|^\s*function|^\s*#' | awk 'NF>1{print $2}' | sort -u | xargs
 
     return 0
 end
 
 
+# Filter option:config rows by keyword; used internally by the option parser.
+# Depends on a user-defined option:config function in the calling script.
 function option:filter
     option:config | grep "$argv[1]" | cut -d'|' -f3 | sort | grep -v '^\s*$'
 end
