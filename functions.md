@@ -14,6 +14,8 @@ option:filter
 script:check_version
 script:housekeeping
 script:init
+script:initialize
+script:meta
 script:safe_exit
 script:show_required
 str:ascii

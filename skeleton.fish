@@ -5,6 +5,7 @@
 #####################################################################
 set action ''
 set error_prefix ''
+set execution_day ''
 set git_repo_remote ''
 set git_repo_root ''
 set install_package ''
@@ -13,9 +14,15 @@ set os_machine ''
 set os_name ''
 set os_version ''
 set script_basename ''
+set script_created ''
+set script_extension ''
 set script_hash '?'
+set script_install_folder ''
+set script_install_path ''
 set script_lines '?'
+set script_modified ''
 set script_prefix ''
+set script_version ''
 set shell_brand ''
 set shell_version ''
 set temp_files ''
@@ -71,12 +78,11 @@ function io:init
     set script_started_at (utility:time | string collect; or echo)
     io:debug 'script '"$script_basename"' started at '"$script_started_at"
 
-    # https://superuser.com/questions/943468/can-a-fish-script-distinguish-between-being-sourced-and-executed
-    if test "$_" != source -a "$_" != "."
-        # Not sourced
+    # Detect if this file was sourced or executed directly
+    # When sourced, status current-filename differs from status filename
+    if test (status current-filename) = (status filename) 2>/dev/null
         set sourced 1
     else
-        # was sourced 
         set sourced 0
     end
 
@@ -86,7 +92,7 @@ function io:init
     # 0 --> piped to cat, thus piped
     test -t 1 && set piped 1 || set piped 0
 
-    if test "$piped" -eq 1 && test -n "$TERM"
+    if test "$piped" -eq 1; and test -n "$TERM"
         set txtReset (tput sgr0 | string collect; or echo)
         set txtError (tput setaf 160 | string collect; or echo)
         set txtInfo (tput setaf 2 | string collect; or echo)
@@ -144,29 +150,29 @@ end
 
 
 function io:progress
-
     if test "$QUIET" != 0
-        set -l screen_width (tput cols 2>/dev/null || echo 80)
-        set -l rest_of_line ( math "$screen_width - 5" )
+        set -l screen_width (tput cols 2>/dev/null; or echo 80)
+        set -l rest_of_line (math "$screen_width - 5")
 
         if test -n "$piped"; and test "$piped" -eq 0
-            io:print '... '"$argv" >&2
+            io:print "... $argv" >&2
         else
-            printf \'... %-\'"$rest_of_line"\'b\\\\r\' "$argv"\' \' >&2
+            printf "... %-""$rest_of_line""s\r" "$argv" >&2
         end
     end
 end
 
 
 function io:countdown
-    set -l seconds ( test -n "$argv[1]" && echo $argv[1] || echo 5 )
-    set -l message ( test -n "$argv[2]" && echo $argv[2] || echo Countdown )
+    set -l seconds (if test -n "$argv[1]"; echo $argv[1]; else; echo 5; end)
+    set -l message (if test -n "$argv[2]"; echo $argv[2]; else; echo Countdown; end)
 
     if test -n "$piped"; and test "$piped" -eq 0
-        io:print "$message"' '"$seconds"' seconds'
+        io:print "$message $seconds seconds"
     else
-        for i in ( seq 0  (math "$seconds -1" ) )
-            io:progress "$txtInfo$message ((math "$seconds - $i")) seconds $txtReset"
+        for i in (seq 0 (math "$seconds - 1"))
+            set -l remaining (math "$seconds - $i")
+            io:progress "$txtInfo""$message $remaining seconds""$txtReset"
             sleep 1
         end
 
@@ -178,8 +184,8 @@ end
 ### interactive
 function io:confirm
     test "$FORCE" -eq 0 && return 0
-    echo "Confirm: [y/N] default is No: "
-    read -n 1 REPLY
+    read -P "Confirm: [y/N] default is No: " -n 1 REPLY
+    or set REPLY ""
 
     if test "$REPLY" = y; or test "$REPLY" = Y
         return 0
@@ -191,8 +197,8 @@ end
 
 function io:ask
     set -l DEFAULT $argv[2]
-    echo "$argv[1]"
-    read -r ' '"$DEFAULT"' > ' ANSWER
+    read -P "$argv[1] [$DEFAULT] > " ANSWER
+    or set ANSWER ""
 
     test -z "$ANSWER" && echo "$DEFAULT" || echo "$ANSWER"
 end
@@ -241,12 +247,12 @@ function utility:throughput
 
     if test "$operations" -gt 1
         if test "$operations" -gt $seconds
-            set ops (math  "$operations"' / '"$duration" | string collect; or echo)
+            set -l ops (math  "$operations"' / '"$duration" | string collect; or echo)
             set ops (utility:round "$ops" 3 | string collect; or echo)
             set duration (utility:round "$duration" 2 | string collect; or echo)
             io:print "$operations"' '"$name"' finished in '"$duration"' secs: '"$ops"' '"$name"'/sec'
         else
-            set ops (math  "$duration"' / '"$operations" | string collect; or echo)
+            set -l ops (math  "$duration"' / '"$operations" | string collect; or echo)
             set ops (utility:round "$ops" 3 | string collect; or echo)
             set duration (utility:round "$duration" 2 | string collect; or echo)
             io:print "$operations"' '"$name"' finished in '"$duration"' secs: '"$ops"' sec/'"$name"
@@ -263,7 +269,7 @@ end
 
 function system:tempfile
 
-    set -l ext ( test "$argv[1]" = "" && echo $argv[1] || echo txt )
+    set -l ext (if test -n "$argv[1]"; echo $argv[1]; else; echo txt; end)
 
     set -l execution_day (date "+%Y-%m-%d")
     set -l RND ( random 1 10000 )
@@ -354,9 +360,9 @@ end
 function str:md5
 
     # default length 10
-    set length ( test -n "$argv[1]" && echo $argv[1] || echo 10 )
+    set length (if test -n "$argv[1]"; echo $argv[1]; else; echo 10; end)
 
-    if command -v md5sum
+    if command -v md5sum >/dev/null 2>&1
         md5sum | cut -c1-"$length"
     else
         # macos
@@ -386,35 +392,42 @@ function script:safe_exit
 
     for temp_file in $temp_files
         if test -f "$temp_file"
-		io:debug 'Delete temp file ['"$temp_file"']'
+		io:debug "Delete temp file [$temp_file]"
 		rm -f "$temp_file"
 	end
     end
 
-    trap - INT TERM EXIT
-    io:debug "$script_basename"' finished after '"$SECONDS"' seconds'
+    set -l duration ""
+    if test -n "$script_started_at"
+        set -l _now (utility:time)
+        set -l _secs (utility:round (math "$_now - $script_started_at") 2)
+        set duration " after $_secs seconds"
+    end
+
+    io:debug "$script_basename finished$duration"
     exit 0
 end
 
 
 function script:check_version
 
-    pushd "$script_install_folder" &>/dev/null
+    set -l _old_dir (pwd)
+    cd "$script_install_folder" >/dev/null 2>&1
     if test -d '.git'
 
-        set remote (git remote -v | grep fetch | awk 'NR == 1 {print $2}' | string collect; or echo)
-        io:progress 'Check for updates - '"$remote"
+        set -l remote (git remote -v | grep fetch | awk 'NR == 1 {print $2}' | string collect; or echo)
+        io:progress "Check for updates - $remote"
 
-        git remote update &>/dev/null
+        git remote update >/dev/null 2>&1
 
         if test (git rev-list --count 'HEAD...HEAD@{upstream}' 2>/dev/null | string collect; or echo) -gt 0
-            io:print 'Found a recent update of this script - run <<'"$script_prefix"' update>> to update'
+            io:print "Found a recent update of this script - run <<$script_prefix update>> to update"
         else
             io:progress '                                         '
         end
     end
 
-    popd &>/dev/null
+    cd "$_old_dir" >/dev/null 2>&1
 end
 
 
@@ -433,7 +446,7 @@ function script:housekeeping
     io:debug "$info_icon"' Script basename: '"$script_basename"
     io:debug "$info_icon"' Linked path: '"$script_install_path"
 
-    set script_install_folder (command cd -P (dirname "$script_install_path" | string collect; or echo) && pwd | string collect; or echo)
+    set script_install_folder (path dirname $script_install_path)
     io:debug "$info_icon"' In folder  : '"$script_install_folder"
 
     if test -f "$script_install_path"
@@ -521,7 +534,7 @@ function script:housekeeping
     io:debug "$info_icon"' User     : '"$USER"'@'"$hostname"
 
     # if run inside a git repo, detect for which remote repo it is
-    if git status &>/dev/null
+    if git status >/dev/null 2>&1
         set git_repo_remote (git remote -v | awk '/(fetch)/ {print $2}' | string collect; or echo)
         io:debug "$info_icon"' git remote : '"$git_repo_remote"
         set git_repo_root (git rev-parse --show-toplevel | string collect; or echo)
@@ -533,7 +546,7 @@ function script:housekeeping
     test -f "$script_install_folder"'/VERSION.txt' && set script_version (command cat "$script_install_folder"'/VERSION.txt' | string collect)
 
     # get script version from git tag 
-    set -l _git_tag ( git tag &>/dev/null )
+    set -l _git_tag (git tag 2>/dev/null | head -1 | string collect; or echo)
     if test -n "$git_repo_root"; and test "$_git_tag" != ""
         set script_version (git tag --sort=version:refname | tail -1)
     end
@@ -580,7 +593,7 @@ function system:folder --argument folder
             mkdir -p "$folder"
         else
             io:debug "$clean_icon"' Cleanup folder: ['"$folder"'] - delete files older than '"$max_days"' day(s)'
-            find "$folder" -mtime '+'"$max_days" -type f -exec rm -i {} \;
+            find "$folder" -mtime +"$max_days" -type f -exec rm -f {} \;
         end
     end
 end
@@ -593,11 +606,13 @@ function system:notify
 
     io:debug "$info_icon "(set -S source | string collect; or echo)
 
-    # for Linux
-    test -n (command -v notify-send | string collect; or echo) && notify-send "$source" "$message"
+    if command -v notify-send >/dev/null 2>&1
+        notify-send "$source" "$message"
+    end
 
-    # for MacOS
-    test -n (command -v osascript | string collect; or echo) && osascript -e 'display notification "'"$message"'" with title "'"$source"'"'
+    if command -v osascript >/dev/null 2>&1
+        osascript -e 'display notification "'"$message"'" with title "'"$source"'"'
+    end
 end
 
 
@@ -664,11 +679,11 @@ function script:show_required
         return 1
     end
 
-    # xargs remvoes blank lines 
+    # xargs removes blank lines 
     echo '# Following packages are needed, you may install them using the command: '
     echo -n "#       $install_package "
 
-    grep 'system:require' "$main_file" | grep -i -v -E '\(\)|grep|# system:require' | str:column 2 | sort -u | xargs
+    grep 'system:require' "$main_file" | grep -i -v -E '\(\)|grep|^\s*function|# system:require' | awk 'NF>1{print $2}' | sort -u | xargs
 
     return 0
 end
@@ -676,4 +691,55 @@ end
 
 function option:filter
     option:config | grep "$argv[1]" | cut -d'|' -f3 | sort | grep -v '^\s*$'
+end
+
+
+# Resolve a symbolic link to its real (physical) path
+function system:follow_link --argument link_path
+    if test -z "$link_path"
+        io:alert "system:follow_link requires a path argument"
+        return 1
+    end
+
+    if command -v realpath >/dev/null 2>&1
+        realpath "$link_path" 2>/dev/null; or echo "$link_path"
+    else if command -v readlink >/dev/null 2>&1
+        set -l result (readlink -f "$link_path" 2>/dev/null)
+        test -n "$result" && echo "$result" || echo "$link_path"
+    else
+        # Manual resolution: follow chain of symlinks
+        set -l target $link_path
+        while test -L "$target"
+            set -l dest (readlink "$target")
+            if string match -q '/*' $dest
+                set target $dest
+            else
+                set target (dirname $target)/$dest
+            end
+        end
+        echo $target
+    end
+end
+
+
+# Display script metadata: version, OS, shell, git, file info
+function script:meta
+    io:print "$txtBold$script_basename $script_version$txtReset"
+    io:print "  OS     : $os_name ($os_kernel) $os_version on $os_machine"
+    io:print "  Shell  : $shell_brand $shell_version"
+    io:print "  Hash   : $script_hash ($script_lines lines)"
+    if test -n "$git_repo_remote"
+        io:print "  Git    : $git_repo_remote"
+    end
+    if test -n "$log_file"
+        io:print "  Log    : $log_file"
+    end
+end
+
+
+# Full initialization: I/O setup + script housekeeping + log/tmp dirs
+function script:initialize
+    io:init
+    script:housekeeping
+    script:init
 end

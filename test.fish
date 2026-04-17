@@ -4,44 +4,44 @@ source skeleton.fish
 
 set -S QUIET
 
-IO:initialize
+io:init
 
 
-IO:alert "hello, world. Alert"
-IO:print "hello, world. Print"
+io:alert "hello, world. Alert"
+io:print "hello, world. Print"
 
 set VERBOSE 0
-IO:debug "hello, world. Debug"
+io:debug "hello, world. Debug"
 
 
-IO:success "hello, world. Success"
-IO:announce "hello, world. Announce"
-# IO:progress "xxx ***"
-# IO:countdown 2 "hello, world. Countdown"
+io:success "hello, world. Success"
+io:announce "hello, world. Announce"
+# io:progress "xxx ***"
+# io:countdown 2 "hello, world. Countdown"
 
-# IO:confirm 
-# IO:ask age 30
+# io:confirm
+# io:ask age 30
 
 set log_file /tmp/log1.txt
-IO:log xxxx 
+io:log xxxx
 
 sleep 1
 cat /tmp/log1.txt
 
 
-Os:tempfile tmp
-Os:tempfile log
+system:tempfile tmp
+system:tempfile log
 echo $temp_files
 
-Os:import_env
+system:load_env
 
-echo xadsds_ńôöòóœ_ | Str:ascii
+echo xadsds_ńôöòóœ_ | str:ascii
 
-Str:slugify "Jack, Jull & Clôcccck"
+str:slugify "Jack, Jull & Clôcccck"
 
-Str:title "Jack, Jull & Clôcccck, xxx, Jack, Jull & Clôcccck"
+str:title "Jack, Jull & Clôcccck, xxx, Jack, Jull & Clôcccck"
 
-echo sadsadsadsad | Str:digest 5
+echo sadsadsadsad | str:md5 5
 
 
 echo '-- init ---'
@@ -49,30 +49,30 @@ echo '-- init ---'
 set LOG_DIR /tmp
 set TMP_DIR /tmp
 
-Script:initialize
+script:initialize
 echo '-- init done ---'
 
-Script:meta
+script:meta
 
-Os:follow_link ~/Downloads
-Os:follow_link ~/bin
+system:follow_link ~/Downloads
+system:follow_link ~/bin
 
-Os:notify "hello, world. CS"
+system:notify "hello, world. CS"
 
 # enable FORCE
 set FORCE 0
-# Os:require xxx
-Os:require 
-Os:require wget
-Os:require whathehellcommand
+# system:require xxx
+system:require
+system:require wget
+system:require whathehellcommand
 
 # set FORCE -1
-Os:require whathehell2
+system:require whathehell2
 
-Script:show_required
-Script:show_required test.fish
+script:show_required
+script:show_required test.fish
 
 
 
-IO:die "I died"
+io:die "I died"
 
